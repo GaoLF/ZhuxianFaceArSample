@@ -1,5 +1,186 @@
 # Tracking and Visualizing Faces
 
+
+## 如何使用CocoaPods
+
+下载与安装`udo gem install cocoapods`
+
+进入工程目录，终端中输入`pod init`
+
+然后会产生PodFile，按照github中的ReadMe文件填写
+
+然后终端中输入`pod install`
+
+## Adding libpcap to Xcode
+
+The first thing that we need to do is add libpcap to our project. Whenever there is a project that you need to add libpcap to, you need to follow the steps mentioned here.
+
+### Getting ready
+
+We need to create an OS X project that we can add the libpcap library to.
+
+### How to do it…
+
+Once the project is created, we need to add the library to our project using these steps:
+
+1. Select the project name from the project navigator area within your Xcode project.
+2. Select the project name from the **TARGET** section.
+3. Select the **Build Phases** tab and open the **Link Binary With Libraries** section.
+4. Click on the **+** sign.
+5. Type `libpcap` in the search box and select the **libpcap.dylib** library.![img](https://static.packt-cdn.com/products/9781849698085/graphics/8085OT_04_03.jpg)
+
+Now that we have the library linked to the project, we need to set the application to run as root for debugging. To do so, follow these steps:
+
+1. To run your project as root, navigate to **Product** | **Scheme** | **Edit Scheme** from the top menu as shown in the following screenshot:
+
+   ![img](https://static.packt-cdn.com/products/9781849698085/graphics/8085OT_04_04.jpg)
+
+2. In the window that opens up, change the Debug Process As selection from Me to root:![image-20191125151948349](/Users/perfect/Library/Application Support/typora-user-images/image-20191125151948349.png)
+
+##`Apple Swift version 4.2.1 Well Tested UDP Example`
+
+STEP 1 :- `pod 'CocoaAsyncSocket'`
+
+STEP 2 :- `import CocoaAsyncSocket` in your `UIViewController`.
+
+STEP 3 :- `UIViewController`
+
+```swift
+        import UIKit
+import CocoaAsyncSocket
+
+class ViewController: UIViewController {
+    @IBOutlet weak var btnOnOff: LightButton!
+    @IBOutlet weak var lblStatus: UILabel!
+    var inSocket : InSocket!
+    var outSocket : OutSocket!
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        lblStatus.isHidden = true
+        inSocket = InSocket()
+        outSocket = OutSocket()
+        outSocket.setupConnection {
+            self.lblStatus.isHidden = false
+        }
+    }
+    @IBAction func btnLight(_ sender: Any) {
+        let signal:Signal = Signal()
+        self.outSocket.send(signal: signal)
+    }
+}
+```
+
+STEP 4 :- ***Reciving Socket\***
+
+```swift
+       //Reciving End...
+class InSocket: NSObject, GCDAsyncUdpSocketDelegate {
+   //let IP = "10.123.45.2"
+    let IP = "127.0.0.1"
+    let PORT:UInt16 = 5001
+    var socket:GCDAsyncUdpSocket!
+    override init(){
+        super.init()
+        setupConnection()
+    }
+    func setupConnection(){
+        socket = GCDAsyncUdpSocket(delegate: self, delegateQueue:DispatchQueue.main)
+        do { try socket.bind(toPort: PORT)} catch { print("")}
+        do { try socket.enableBroadcast(true)} catch { print("not able to brad cast")}
+        do { try socket.joinMulticastGroup(IP)} catch { print("joinMulticastGroup not procceed")}
+        do { try socket.beginReceiving()} catch { print("beginReceiving not procceed")}
+    }
+    //MARK:-GCDAsyncUdpSocketDelegate
+    func udpSocket(_ sock: GCDAsyncUdpSocket, didReceive data: Data, fromAddress address: Data, withFilterContext filterContext: Any?) {
+          print("incoming message: \(data)");
+          let signal:Signal = Signal.unarchive(d: data)
+          print("signal information : \n first \(signal.firstSignal) , second \(signal.secondSignal) \n third \(signal.thirdSignal) , fourth \(signal.fourthSignal)")
+
+    }
+    func udpSocket(_ sock: GCDAsyncUdpSocket, didNotConnect error: Error?) {
+    }
+
+    func udpSocketDidClose(_ sock: GCDAsyncUdpSocket, withError error: Error?) {
+    }
+}
+```
+
+STEP 5 :- ***Sending Socket..\***
+
+```swift
+//Sending End...
+class OutSocket: NSObject, GCDAsyncUdpSocketDelegate {
+    // let IP = "10.123.45.1"
+    let IP = "127.0.0.1"
+    let PORT:UInt16 = 5001
+    var socket:GCDAsyncUdpSocket!
+    override init(){
+        super.init()
+
+    }
+    func setupConnection(success:(()->())){
+        socket = GCDAsyncUdpSocket(delegate: self, delegateQueue:DispatchQueue.main)
+          do { try socket.bind(toPort: PORT)} catch { print("")}
+          do { try socket.connect(toHost:IP, onPort: PORT)} catch { print("joinMulticastGroup not procceed")}
+          do { try socket.beginReceiving()} catch { print("beginReceiving not procceed")}
+        success()
+    }
+    func send(signal:Signal){
+        let signalData = Signal.archive(w: signal)
+        socket.send(signalData, withTimeout: 2, tag: 0)
+    }
+    //MARK:- GCDAsyncUdpSocketDelegate
+    func udpSocket(_ sock: GCDAsyncUdpSocket, didConnectToAddress address: Data) {
+        print("didConnectToAddress");
+    }
+    func udpSocket(_ sock: GCDAsyncUdpSocket, didNotConnect error: Error?) {
+        if let _error = error {
+            print("didNotConnect \(_error )")
+        }
+    }
+    func udpSocket(_ sock: GCDAsyncUdpSocket, didNotSendDataWithTag tag: Int, dueToError error: Error?) {
+          print("didNotSendDataWithTag")
+    }
+    func udpSocket(_ sock: GCDAsyncUdpSocket, didSendDataWithTag tag: Int) {
+        print("didSendDataWithTag")
+    }
+}
+```
+
+STEP 6 :- Your **Signal** Data which you will **Send/Recieve**
+
+```swift
+import Foundation
+struct Signal {
+    var firstSignal:UInt16 = 20
+    var secondSignal:UInt16 = 30
+    var thirdSignal: UInt16  = 40
+    var fourthSignal: UInt16 = 50
+    static func archive(w:Signal) -> Data {
+        var fw = w
+        return Data(bytes: &fw, count: MemoryLayout<Signal>.stride)
+    }
+    static func unarchive(d:Data) -> Signal {
+        guard d.count == MemoryLayout<Signal>.stride else {
+            fatalError("BOOM!")
+        }
+        var s:Signal?
+        d.withUnsafeBytes({(bytes: UnsafePointer<Signal>)->Void in
+            s = UnsafePointer<Signal>(bytes).pointee
+        })
+        return s!
+    }
+}
+```
+
+
+
+
+
+------------------------------ the apple introduction
+
+
+
 Detect faces in a camera feed, overlay matching virtual content, and animate facial expressions in real-time.    
 
 ## Overview
